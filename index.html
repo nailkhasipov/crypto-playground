@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>🔐 Crypto Playground</title>
+  <style>
+    textarea {
+      resize: none;
+    }
+  </style>
+</head>
+<body>
+  <button onclick="generateKey()">Generate Key</button>
+  <br>
+  <br>
+  <form onsubmit="encrypt();return false;">
+    <textarea name="decrypted" id="decrypted" cols="50" rows="10"></textarea>
+    <input type="submit" value="Encrypt">
+  </form>
+  
+  <form onsubmit="decrypt();return false;">
+    <textarea name="encrypted" id="encrypted" cols="50" rows="10"></textarea>
+    <input type="submit" value="Decrypt">
+  </form>
+
+  <script>
+    let AESkey;
+    let buffer = undefined;
+    const decryptedTextArea = document.querySelector('#decrypted');
+    const encryptedTextArea = document.querySelector('#encrypted');
+
+    async function encrypt() {
+      const text = decryptedTextArea.value;
+
+      const encrypted = await encryptText(text, AESkey);
+      buffer = encrypted;
+      encryptedTextArea.value = buf2hex(encrypted);
+    }
+
+    async function decrypt() {
+      const encryptedText = encryptedTextArea.value;
+
+      const decrypted = await decryptText(buffer, AESkey);
+
+      const dec = new TextDecoder("utf-8");
+      alert(dec.decode(decrypted));
+    }
+
+    async function encryptText(text, key) {
+      const enc = new TextEncoder();
+      const data = enc.encode(text);
+
+      const encrypted = await window.crypto.subtle.encrypt(
+        {
+          name: "AES-CTR",
+          counter: new Uint8Array(16),
+          length: 128
+        },
+        key,
+        data
+      )
+
+      return new Uint8Array(encrypted);
+    }
+
+    async function  decryptText(buffer, key) {
+      const decrypted = await window.crypto.subtle.decrypt(
+        {
+          name: "AES-CTR",
+          counter: new ArrayBuffer(16),
+          length: 128
+        },
+        key,
+        buffer
+      )
+
+      return new Uint8Array(decrypted);
+    }
+
+    async function generateKey() {
+      AESkey = await window.crypto.subtle.generateKey(
+        {
+          name: "AES-CTR",
+          length: 256
+        },
+        false,
+        ["encrypt", "decrypt"]
+      )
+    }
+
+    // https://stackoverflow.com/questions/40031688/javascript-arraybuffer-to-hex
+    function buf2hex(buffer) {
+      return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2)).join('');
+    }
+  </script>
+</body>
+</html>
