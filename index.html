@@ -37,6 +37,7 @@
     const privateKey = localStorage.getItem('privateKey') || undefined;
     const encryptedData = localStorage.getItem('encryptedData') || undefined;
     const encryptedDataKey = localStorage.getItem('encryptedDataKey') || undefined;
+    const decryptedData = localStorage.getItem('data') || '';
     let sessionKey = undefined;
 
     window.onload = function() {
@@ -73,6 +74,7 @@
 
       localStorage.setItem('encryptedData', encryptedData);
       localStorage.setItem('encryptedDataKey', encryptedDataKey);
+      localStorage.removeItem('data');
 
       location.reload();
     }
@@ -81,8 +83,11 @@
       const importedPrivateKey = await importPrivateKey(JSON.parse(privateKey));
       const key = await unwrapKey(encryptedDataKey, importedPrivateKey);
       const decrypted = await decrypt(key, encryptedData);
-      
-      alert(decrypted);
+
+      localStorage.removeItem('encryptedData');
+      localStorage.removeItem('encryptedDataKey');
+
+      localStorage.setItem('data', decrypted);
 
       location.reload();
     }
@@ -190,7 +195,7 @@
       return (
         `<div class="page page-safe">
           <h1>${encryptedData && encryptedDataKey ? 'The safe is closed 🔒.' : 'The safe is open 🔓.'}</h1>
-          <textarea name="safe" id="safe" cols="30" rows="10" ${encryptedData && encryptedDataKey ? 'disabled' : ''}></textarea>
+          <textarea name="safe" id="safe" cols="30" rows="10" ${encryptedData && encryptedDataKey ? 'disabled' : ''}>${decryptedData}</textarea>
           <br>
           ${encryptedData && encryptedDataKey ?
             '<button onclick="unlock()">Unlock</button>' :
