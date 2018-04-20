@@ -6,94 +6,99 @@
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
   <title>🔐 Crypto Playground</title>
   <style>
+    html, body {
+      font-family: Arial, Helvetica, sans-serif;
+      color: #2e2e2e;
+      padding-top: 60px;
+    }
+
     textarea {
       resize: none;
+    }
+
+    .page {
+      width: 100%;
+      text-align: center;
+    }
+
+    .page-welcome .safe-emoji {
+      font-size: 60px;
     }
   </style>
 </head>
 <body>
-  <button onclick="generateKey()">Generate Key</button>
-  <br>
-  <br>
-  <form onsubmit="encrypt();return false;">
-    <textarea name="decrypted" id="decrypted" cols="50" rows="10"></textarea>
-    <input type="submit" value="Encrypt">
-  </form>
-  
-  <form onsubmit="decrypt();return false;">
-    <textarea name="encrypted" id="encrypted" cols="50" rows="10"></textarea>
-    <input type="submit" value="Decrypt">
-  </form>
+  <div id="root"></div>
 
   <script>
-    let AESkey;
-    let buffer = undefined;
-    const decryptedTextArea = document.querySelector('#decrypted');
-    const encryptedTextArea = document.querySelector('#encrypted');
+    const publicKey = localStorage.getItem('publicKey') || undefined;
+    const privateKey = localStorage.getItem('privateKey') || undefined;
 
-    async function encrypt() {
-      const text = decryptedTextArea.value;
-
-      const encrypted = await encryptText(text, AESkey);
-      buffer = encrypted;
-      encryptedTextArea.value = buf2hex(encrypted);
+    window.onload = function() {
+      if (publicKey && privateKey) {
+        render(pageSafe);
+      } else if (!publicKey && !privateKey) {
+        render(pageWelcome);
+      } else {
+        render(pageError);
+      }
     }
 
-    async function decrypt() {
-      const encryptedText = encryptedTextArea.value;
+    async function generate() {
+      const key = await generateRSAKey();
+      const exportedPublicKey = await exportKey(key.publicKey);
+      const exportedPrivateKey = await exportKey(key.privateKey);
 
-      const decrypted = await decryptText(buffer, AESkey);
-
-      const dec = new TextDecoder("utf-8");
-      alert(dec.decode(decrypted));
+      localStorage.setItem('publicKey', JSON.stringify(exportedPublicKey));
+      localStorage.setItem('privateKey', JSON.stringify(exportedPrivateKey));
+      location.reload();
     }
 
-    async function encryptText(text, key) {
-      const enc = new TextEncoder();
-      const data = enc.encode(text);
-
-      const encrypted = await window.crypto.subtle.encrypt(
+    async function generateRSAKey() {
+      return await window.crypto.subtle.generateKey(
         {
-          name: "AES-CTR",
-          counter: new Uint8Array(16),
-          length: 128
+          name: 'RSA-OAEP',
+          modulusLength: 2048,
+          publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
+          hash: {name: 'SHA-256'}
         },
-        key,
-        data
-      )
-
-      return new Uint8Array(encrypted);
-    }
-
-    async function  decryptText(buffer, key) {
-      const decrypted = await window.crypto.subtle.decrypt(
-        {
-          name: "AES-CTR",
-          counter: new ArrayBuffer(16),
-          length: 128
-        },
-        key,
-        buffer
-      )
-
-      return new Uint8Array(decrypted);
-    }
-
-    async function generateKey() {
-      AESkey = await window.crypto.subtle.generateKey(
-        {
-          name: "AES-CTR",
-          length: 256
-        },
-        false,
-        ["encrypt", "decrypt"]
+        true,
+        ['encrypt', 'decrypt']
       )
     }
 
-    // https://stackoverflow.com/questions/40031688/javascript-arraybuffer-to-hex
-    function buf2hex(buffer) {
-      return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2)).join('');
+    async function exportKey(key) {
+      console.log(key);
+      return await window.crypto.subtle.exportKey(
+        'jwk',
+        key
+      )
     }
+
+    function render(page) {
+      document.querySelector('#root').innerHTML = page;
+    }
+
+    const pageWelcome = `
+<div class="page page-welcome">
+  <h1>Welcome!</h1>
+  <h2>This is your safe.</h2>
+  <span class="safe-emoji">🗄</span>
+  <p>The safe is not setup yet. For first of all let's <button onclick="generate()">generate</button> a public and secret keys 🔑.</p>
+</div>
+    `;
+
+    const pageSafe = `
+<div class="page page-safe">
+  <h1>The safe is open 🔓.</h1>
+  <textarea name="safe" id="safe" cols="30" rows="10"></textarea>
+  <br>
+  <button>Lock</button>
+</div>`;
+
+  const pageError = `
+<div class="page page-error">
+  <h1>Oooops something went wrong 🤷‍.</h1>
+</div>`;
   </script>
 </body>
 </html>
