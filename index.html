@@ -66,16 +66,20 @@
       const safe = document.querySelector('#safe');
       const data = enc.encode(safe.value);
       const encryptedData = await encrypt(sessionKey, data);
-      const exportedSessionKey = await exportKey(sessionKey);
+
+      const importedPublicKey = await importPublicKey(JSON.parse(publicKey));
+      const wrappedSessionKey = await wrapKey(sessionKey, importedPublicKey);
+      const encryptedDataKey = arrayBufferToBase64(wrappedSessionKey);
 
       localStorage.setItem('encryptedData', encryptedData);
-      localStorage.setItem('encryptedDataKey', JSON.stringify(exportedSessionKey));
+      localStorage.setItem('encryptedDataKey', encryptedDataKey);
 
       location.reload();
     }
 
     async function unlock() {
-      const key = await importKey(JSON.parse(encryptedDataKey), 'AES-CTR');
+      const importedPrivateKey = await importPrivateKey(JSON.parse(privateKey));
+      const key = await unwrapKey(encryptedDataKey, importedPrivateKey);
       const decrypted = await decrypt(key, encryptedData);
       
       alert(decrypted);
@@ -85,7 +89,7 @@
 
     async function generateRSAKey() {
       const alg = {name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([0x01, 0x00, 0x01]), hash: {name: 'SHA-256'}};
-      return await window.crypto.subtle.generateKey(alg, true, ['encrypt', 'decrypt']);
+      return await window.crypto.subtle.generateKey(alg, true, ['wrapKey', 'unwrapKey']);
     }
 
     async function generateSessionKey() {
@@ -97,31 +101,15 @@
       const alg = {name: 'AES-CTR', counter: new Uint8Array(16), length: 128};
       const ciphertext = await window.crypto.subtle.encrypt(alg, key, data)
 
-      // https://gist.github.com/chrisveness/43bcda93af9f646d083fad678071b90a
-      // ciphertext as byte array
-      const ciphertextArray = Array.from(new Uint8Array(ciphertext));
-      // ciphertext as string
-      const ciphertextStr = ciphertextArray.map(byte => String.fromCharCode(byte)).join('');
-      // encode ciphertext as base64
-      const ciphertextBase64 = btoa(ciphertextStr);
-
-      return ciphertextBase64;
+      return arrayBufferToBase64(ciphertext);
     }
 
     async function decrypt(key, data) {
-      // decode base64 ciphertext
-      const ciphertextStr = atob(data);
-      // ciphertext as Uint8Array
-      let ciphertextArr = [];
-      for (var i = 0; i < ciphertextStr.length; i++) {
-        ciphertextArr.push(ciphertextStr.charAt(i).charCodeAt(0));
-      }
-
-      const ciphertextStrUint8 = new Uint8Array(ciphertextArr);
+      const encryptedData = base64ToArrayBuffer(data);
 
       const alg = {name: 'AES-CTR', counter: new ArrayBuffer(16), length: 128};
 
-      const buffer = await window.crypto.subtle.decrypt(alg, key, ciphertextStrUint8);
+      const buffer = await window.crypto.subtle.decrypt(alg, key, encryptedData);
 
       // decode text from UTF-8
       const plaintext = dec.decode(buffer);
@@ -134,8 +122,53 @@
     }
 
     async function importKey(jwk, algorithm) {
-      console.log(algorithm);
       return await window.crypto.subtle.importKey('jwk', jwk, {name: algorithm}, true, ['encrypt', 'decrypt']);
+    }
+
+    async function importPublicKey(jwk) {
+      return window.crypto.subtle.importKey('jwk', jwk, {name: 'RSA-OAEP', hash: {name: 'SHA-256'}}, true, ['wrapKey']);
+    }
+
+    async function importPrivateKey(jwk) {
+      return window.crypto.subtle.importKey('jwk', jwk, {name: 'RSA-OAEP', hash: {name: 'SHA-256'}}, true, ['unwrapKey']);
+    }
+
+    async function wrapKey(key, publicKey) {
+      const alg = {name: "RSA-OAEP", hash: {name: "SHA-256"}};
+      return await window.crypto.subtle.wrapKey('raw', key, publicKey, alg);
+    }
+
+    async function unwrapKey(wrapped, privateKey) {
+      const unwrapAlgo = {name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([0x01, 0x00, 0x01]), hash: {name: "SHA-256"}};
+      const wrappedBuffer = base64ToArrayBuffer(wrapped);
+      // @TODO must not be here
+      const unwrappedKeyAlgo = {
+        name: "AES-CTR",
+        length: 256
+      };
+      return window.crypto.subtle.unwrapKey('raw', wrappedBuffer, privateKey, unwrapAlgo, unwrappedKeyAlgo, true, ['encrypt', 'decrypt']);
+    }
+
+    // https://gist.github.com/chrisveness/43bcda93af9f646d083fad678071b90a
+    function arrayBufferToBase64(buffer) {
+      // buffer as byte array
+      const byteArray = Array.from(new Uint8Array(buffer));
+      // byteArray as string
+      const string = byteArray.map(byte => String.fromCharCode(byte)).join('');
+      // encode string as base64
+      return btoa(string);
+    }
+
+    function base64ToArrayBuffer(base64) {
+      // decode base64
+      const decodedBase64 = atob(base64);
+      // to Uint8Array
+      let arr = [];
+      for (var i = 0; i < decodedBase64.length; i++) {
+        arr.push(decodedBase64.charAt(i).charCodeAt(0));
+      }
+
+      return new Uint8Array(arr);
     }
 
     function render(page) {
